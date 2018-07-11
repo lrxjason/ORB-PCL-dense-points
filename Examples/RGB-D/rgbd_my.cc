@@ -55,21 +55,47 @@ int main(int argc, char **argv)
     cv::Mat imRGB, imD;
     for ( int index = start_index; index < end_index; index ++ )
     {
-        boost::format fmt ("%s/rgb_index/%d.png");
+	cerr<<endl<<index;
+        boost::format fmt ("%s/color/%d.png");
 
         imRGB = cv::imread( (fmt%argv[3]%index).str(), CV_LOAD_IMAGE_UNCHANGED);
-        fmt = boost::format("%s/dep_index/%d.png");
+        fmt = boost::format("%s/depth/%d.png");
 
         imD = cv::imread( (fmt%argv[3]%index).str(), CV_LOAD_IMAGE_UNCHANGED);
-        SLAM.TrackRGBD( imRGB, imD, index  );
 
-        ;
+
+#ifdef COMPILEDWITHC11
+        std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
+#else
+        std::chrono::monotonic_clock::time_point t1 = std::chrono::monotonic_clock::now();
+#endif
+
+        // Pass the image to the SLAM system
+         SLAM.TrackRGBD( imRGB, imD, index  );
+
+#ifdef COMPILEDWITHC11
+        std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
+#else
+        std::chrono::monotonic_clock::time_point t2 = std::chrono::monotonic_clock::now();
+#endif
+
+        double ttrack= std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
+
+	cerr<<endl<<ttrack<<endl;
+
+        if(ttrack<0.03)
+            usleep((0.03-ttrack)*1e4);
     }
+
+    
+    // Save camera trajectory
+    SLAM.SaveTrajectoryTUM("CameraTrajectory.txt");
+    SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");
+
+
     // Stop all threads
-    cv::waitKey(0);
-
     SLAM.Shutdown();
-
+    cerr<<"SLAM shutDown"<<endl;
 
     return 0;
 }
