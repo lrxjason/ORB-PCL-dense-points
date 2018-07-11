@@ -28,14 +28,18 @@ void PointCloudMapping::shutdown()
     viewerThread->join();
 }
 
-void PointCloudMapping::insertKeyFrame(KeyFrame* kf, cv::Mat& color, cv::Mat& depth)
+void PointCloudMapping::insertKeyFrame(KeyFrame* kf, cv::Mat& color, cv::Mat& depth, vector<KeyFrame*> All_KFs, int changeID)
 {
-    cout<<"receive a keyframe, id = "<<kf->mnId<<endl;
+    cout<<"receive a keyframe, mnId = "<<kf->mnId<<endl;
     unique_lock<mutex> lck(keyframeMutex);
     keyframes.push_back( kf );
     colorImgs.push_back( color.clone() );
     depthImgs.push_back( depth.clone() );
-
+//     cout<<"receive a keyframe, nNextId = "<<kf->nNextId<<endl;
+//     cout<<"receive a keyframe, mnFrameId = "<<kf->mnFrameId<<endl;
+//     cout<<"size of ALL_KFS = "<< All_KFs.size()<<endl;
+    cout<<"change ID = " << changeID<<endl;
+    updateID = changeID;
     keyFrameUpdated.notify_one();
 }
 
@@ -76,12 +80,22 @@ pcl::PointCloud< PointCloudMapping::PointT >::Ptr PointCloudMapping::generatePoi
 void PointCloudMapping::viewer()
 {
     pcl::visualization::CloudViewer viewer("viewer");
+    int NewchangeID = 0;
     while(1)
     {
+      
         {
             unique_lock<mutex> lck_shutdown( shutDownMutex );
             if (shutDownFlag)
             {
+     		globalMap = boost::make_shared< PointCloud >( );
+     		for ( size_t i=0; i<lastKeyframeSize ; i++ )
+     		{
+	  		PointCloud::Ptr p = generatePointCloud( keyframes[i], colorImgs[i], depthImgs[i] );
+	  		*globalMap += *p;
+     		}
+		pcl::io::savePCDFile("test_cloud.pcd", *globalMap);
+		cout<<"Final result saved."<<endl;
                 break;
             }
         }
@@ -97,7 +111,22 @@ void PointCloudMapping::viewer()
             N = keyframes.size();
         }
 
-        for ( size_t i=lastKeyframeSize; i<N ; i++ )
+	if(NewchangeID != updateID)
+	{
+	    //vector<KeyFrame*> vpKFs = mpMap->GetAllKeyFrames();
+	    cout<< endl;
+	    cout<<"update point cloud!!!!!"<<endl;
+	    globalMap = boost::make_shared< PointCloud >( );
+	    for ( size_t i=0; i<lastKeyframeSize ; i++ )
+	    {
+	      PointCloud::Ptr p = generatePointCloud( keyframes[i], colorImgs[i], depthImgs[i] );
+	      *globalMap += *p;
+	    }
+	    cout<<"point cloud update done!!!!!"<<endl<<endl<<endl;
+	    cout<< endl;
+	}
+        
+	for ( size_t i=lastKeyframeSize; i<N ; i++ )
         {
             PointCloud::Ptr p = generatePointCloud( keyframes[i], colorImgs[i], depthImgs[i] );
             *globalMap += *p;
@@ -109,8 +138,7 @@ void PointCloudMapping::viewer()
         viewer.showCloud( globalMap );
         cout << "show global map, size=" << globalMap->points.size() << endl;
         lastKeyframeSize = N;
+	NewchangeID = updateID;
     }
-	pcl::io::savePCDFile("result.pcd", *globalMap);
-	cout<<"Final result saved."<<endl;
 }
 
